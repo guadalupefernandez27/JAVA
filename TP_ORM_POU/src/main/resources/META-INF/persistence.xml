@@ -5,7 +5,7 @@
              version="3.0">
     <persistence-unit name="my_sql">
         <class>org.example.Pou</class>
-        <class>org.example.Alimentos</class>
+        <class>org.example.Alimento</class>
         <properties>
             <property name="jakarta.persistence.jdbc.driver" value="com.mysql.cj.jdbc.Driver"/>
             <property name="jakarta.persistence.jdbc.url" value="jdbc:mysql://localhost:3306/pou_db"/>
