@@ -1,0 +1,25 @@
+// Modulo "client": la app grafica con LibGDX (backend desktop LWJGL3).
+// Solo dibuja lo que le manda el servidor y le manda los inputs del teclado.
+apply plugin: 'application'
+
+application {
+    mainClass = "${appMainClassClientDesktop}"
+}
+
+dependencies {
+    implementation project(':core')
+
+    implementation "com.badlogicgames.gdx:gdx:${gdxVersion}"
+    implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:${gdxVersion}"
+
+    // Nativos de escritorio (Win/Mac/Linux). Gradle baja el que corresponda
+    // segun el SO donde se compila/corre. Si en la facultad usan Windows,
+    // este mismo build.gradle sirve sin tocar nada.
+    implementation "com.badlogicgames.gdx:gdx-platform:${gdxVersion}:natives-desktop"
+}
+
+// LibGDX carga los assets con rutas relativas (Gdx.files.internal("personajes/personaje1.png")),
+// asi que el proceso tiene que arrancar con la carpeta assets/ como directorio de trabajo.
+tasks.named('run') {
+    workingDir = file('assets')
+}

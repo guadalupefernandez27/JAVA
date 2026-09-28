@@ -1,0 +1,11 @@
+// Modulo "server": corre la logica del juego (game loop) y atiende clientes por socket.
+// Es una app de consola comun (no LibGDX): no necesita ventana ni graficos.
+apply plugin: 'application'
+
+application {
+    mainClass = "${appMainClassServer}"
+}
+
+dependencies {
+    implementation project(':core')
+}

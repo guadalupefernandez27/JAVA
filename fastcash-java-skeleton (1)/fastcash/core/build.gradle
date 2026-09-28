@@ -1,0 +1,5 @@
+// Modulo "core": clases compartidas entre server y client (modelos de red, constantes).
+// No depende de LibGDX ni de nada grafico: es codigo puro de datos + protocolo.
+dependencies {
+    implementation "com.google.code.gson:gson:${gsonVersion}"
+}
