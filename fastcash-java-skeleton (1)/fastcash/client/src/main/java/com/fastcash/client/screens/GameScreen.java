@@ -23,23 +23,6 @@ import com.fastcash.core.model.RecursoDef;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Pantalla principal de juego (equivalente al bloque "if iniciar_juego:" del Python).
- * IMPORTANTE: esta clase NO calcula fisica, ni colisiones, ni puntaje.
- * Solo lee el ultimo GameStateSnapshot que llego del servidor y lo dibuja,
- * y manda las teclas apretadas. Esa es la idea de "cliente tonto" del enunciado.
- *
- * A esta pantalla se llega ya con el modulo y el personaje (0=masculino,
- * 1=femenino) elegidos. El MAPA, en cambio, no lo elige el jugador: es
- * compartido por toda la partida (snapshot.mapaActual) y avanza solo segun
- * el puntaje del que va ganando, asi que los 2 jugadores ven siempre el
- * mismo fondo/recursos en pantalla aunque tengan puntajes distintos.
- *
- * Cada uno de los 7 mapas del modulo trae su propio fondo, sus propios
- * recursos (o los 7 billetes reales compartidos, en barrios-caba) y su
- * propio archivo de personaje para el genero elegido (el "traje" del
- * personaje cambia con el mapa, no la eleccion de genero en si).
- */
 public class GameScreen extends ScreenAdapter {
 
     private static final float DURACION_INFO_SEGUNDOS = 4f;
@@ -52,15 +35,12 @@ public class GameScreen extends ScreenAdapter {
     private final int personajeIndex; // 0=masculino, 1=femenino
 
     private final Texture[] fondosMapa;          // 1 por mapa (7)
-    private final Texture[] personajeTexturas;   // 1 por mapa (7), ya filtrado al genero elegido
-    private final Texture[] imagenesInfoMapa;    // 1 por mapa (7), opcional
-    // Recursos de modulos 1 a 3: 2 por mapa ("item1"/"item2", en ese orden).
+    private final Texture[] personajeTexturas;   // 1 por mapa (7)
+    private final Texture[] imagenesInfoMapa;    // 1 por mapa (7)
     private final Texture[][] recursoTexturasPorMapa;
-    // Recursos de barrios-caba: compartidos, uno por denominacion (id = "10".."20000").
     private final Map<String, Texture> recursoTexturasCompartidas = new HashMap<>();
     private final Texture pixelBlanco;
 
-    // Estado de la pantalla informativa entre mapas (ver actualizarPantallaInformativa).
     private boolean mostrandoInfo = false;
     private float tiempoRestanteInfo = 0f;
     private int ultimoMapaMostrado = -1;
@@ -73,8 +53,6 @@ public class GameScreen extends ScreenAdapter {
         this.personajeIndex = personajeIndex;
 
         Modulo encontrado = GameModules.porId(moduloId);
-        // No deberia pasar (solo se llega aca despues de confirmar el modulo con el
-        // servidor), pero por las dudas no rompemos la app si el id fuera invalido.
         this.modulo = encontrado != null ? encontrado : GameModules.MODULOS.get(0);
 
         int cantidadMapas = modulo.niveles.size();
@@ -92,9 +70,6 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private Texture crearPixelBlanco() {
-        // Textura de 1x1 usada como "lienzo" para dibujar rectangulos de color
-        // solido (fondos/personajes/recursos/carteles de respaldo) con el
-        // mismo SpriteBatch, sin mezclar con ShapeRenderer.
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.WHITE);
         pixmap.fill();
@@ -141,9 +116,6 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void cargarImagenesInformativas() {
-        // Convencion para cuando estas imagenes existan: modulos/<id>/<idMapa>/info.png
-        // (opcional). Mientras no esten creadas, el cartel se dibuja solo con
-        // texto sobre un color solido; en cuanto agreguen el archivo se usa solo.
         for (int i = 0; i < modulo.niveles.size(); i++) {
             Nivel nivel = modulo.niveles.get(i);
             imagenesInfoMapa[i] = cargarSiExiste("modulos/" + moduloId + "/" + nivel.id + "/info.png");
@@ -155,10 +127,19 @@ public class GameScreen extends ScreenAdapter {
         GameStateSnapshot snapshot = client.ultimoEstado();
         PlayerState propio = snapshot != null ? buscarPropio(snapshot) : null;
 
+        // Si la partida terminó para este jugador, se evalúa la salida al menú principal
+        if (propio != null && !propio.vivo) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.justTouched()) {
+                client.cerrar();
+                game.setScreen(new MenuScreen(game));
+                return;
+            }
+        }
+
         actualizarPantallaInformativa(snapshot, delta);
 
         if (mostrandoInfo) {
-            client.enviarInput(false, false); // congelado mientras se lee el cartel
+            client.enviarInput(false, false);
         } else {
             leerInputYEnviar();
         }
@@ -180,12 +161,6 @@ public class GameScreen extends ScreenAdapter {
         batch.end();
     }
 
-    /**
-     * Detecta cuando el MAPA COMPARTIDO de la partida cambia (incluido el
-     * primero, al entrar) y prende el cartel informativo para los 2
-     * jugadores a la vez. Se apaga solo despues de DURACION_INFO_SEGUNDOS,
-     * o antes si el jugador aprieta ESPACIO.
-     */
     private void actualizarPantallaInformativa(GameStateSnapshot snapshot, float delta) {
         if (snapshot == null) return;
 
@@ -198,7 +173,7 @@ public class GameScreen extends ScreenAdapter {
 
         if (mostrandoInfo) {
             tiempoRestanteInfo -= delta;
-            if (tiempoRestanteInfo <= 0f || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            if (tiempoRestanteInfo <= 0f || Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.justTouched()) {
                 mostrandoInfo = false;
             }
         }
@@ -225,8 +200,8 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void leerInputYEnviar() {
-        boolean left = Gdx.input.isKeyPressed(Input.Keys.LEFT);
-        boolean right = Gdx.input.isKeyPressed(Input.Keys.RIGHT);
+        boolean left = Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.A);
+        boolean right = Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D);
         client.enviarInput(left, right);
     }
 
@@ -236,8 +211,6 @@ public class GameScreen extends ScreenAdapter {
         if (fondo != null) {
             batch.draw(fondo, 0, 0, GameConfig.WORLD_WIDTH, GameConfig.WORLD_HEIGHT);
         } else {
-            // Este mapa todavia no tiene fondo cargado: color solido de respaldo
-            // (distinto por mapa, solo para poder distinguirlos mientras tanto).
             batch.setColor(colorDeRespaldo(mapaActual));
             batch.draw(pixelBlanco, 0, 0, GameConfig.WORLD_WIDTH, GameConfig.WORLD_HEIGHT);
             batch.setColor(Color.WHITE);
@@ -245,16 +218,11 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private Color colorDeRespaldo(int mapa) {
-        float tono = mapa / (float) Math.max(1, modulo.niveles.size() - 1); // 0..1
+        float tono = mapa / (float) Math.max(1, modulo.niveles.size() - 1);
         return new Color(0.10f + 0.10f * tono, 0.10f, 0.20f - 0.10f * tono, 1f);
     }
 
     private void dibujarRecursos(GameStateSnapshot snapshot) {
-        // Nota: si el mapa compartido acaba de cambiar, un recurso que ya
-        // estaba cayendo (spawneado bajo el mapa anterior) se sigue
-        // dibujando con la textura del mapa NUEVO hasta que lo atrapen o se
-        // caiga (el servidor no guarda de que mapa vino cada uno). Es una
-        // inconsistencia visual minima y muy breve; no afecta el puntaje.
         for (RecursoCaido r : snapshot.recursos) {
             Texture textura = texturaDeRecurso(r, snapshot.mapaActual);
             float yPantalla = GameConfig.WORLD_HEIGHT - r.y - GameConfig.RECURSO_HEIGHT;
@@ -279,9 +247,6 @@ public class GameScreen extends ScreenAdapter {
 
     private void dibujarJugadores(GameStateSnapshot snapshot) {
         for (PlayerState p : snapshot.jugadores) {
-            // -1 = todavia no eligio personaje (por ejemplo, el otro jugador recien
-            // esta en la pantalla de seleccion): lo mostramos como masculino
-            // para no romper el render, nada mas.
             int indice = p.personajeIndex >= 0 ? p.personajeIndex : 0;
             Texture textura = indice == personajeIndex
                     ? personajeTexturas[snapshot.mapaActual]
@@ -294,8 +259,6 @@ public class GameScreen extends ScreenAdapter {
                 batch.draw(textura, p.x, yPantalla, GameConfig.PLAYER_WIDTH, GameConfig.PLAYER_HEIGHT);
                 batch.setColor(Color.WHITE);
             } else {
-                // Todavia no hay imagen para este personaje: bloque de color de respaldo,
-                // uno distinto por indice para poder distinguir a los 2 jugadores.
                 batch.setColor(indice == 0 ? new Color(0.6f, 0.2f, 0.2f, 1f) : new Color(0.2f, 0.3f, 0.6f, 1f));
                 batch.draw(pixelBlanco, p.x, yPantalla, GameConfig.PLAYER_WIDTH, GameConfig.PLAYER_HEIGHT);
                 batch.setColor(Color.WHITE);
@@ -306,12 +269,6 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    /**
-     * Textura del OTRO jugador (genero distinto al propio): no la tenemos
-     * precargada (solo cargamos el genero que elegimos nosotros, para no
-     * duplicar memoria de texturas sin necesidad), asi que la cargamos on
-     * demand la primera vez que hace falta y la reusamos despues.
-     */
     private final Map<String, Texture> texturasOtroGeneroCache = new HashMap<>();
 
     private Texture texturaDelOtroPersonaje(int indice, int mapaActual) {
@@ -323,8 +280,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private Texture cargarSiExisteONull(String ruta) {
-        Texture t = cargarSiExiste(ruta);
-        return t; // puede ser null; computeIfAbsent lo vuelve a intentar cada vez si es null, es aceptable aca
+        return cargarSiExiste(ruta);
     }
 
     private void dibujarHud(GameStateSnapshot snapshot, PlayerState propio) {
@@ -337,8 +293,12 @@ public class GameScreen extends ScreenAdapter {
         game.getFont().draw(batch, modulo.nombre + " - " + nivel.titulo, 10, GameConfig.WORLD_HEIGHT - 70);
 
         if (!propio.vivo) {
-            String mensaje = propio.gano ? "GANASTE" : "PERDISTE";
-            game.getFont().draw(batch, mensaje, 550, 320);
+            String resultado = propio.gano ? "¡GANASTE!" : "PERDISTE";
+            game.getFont().setColor(propio.gano ? Color.GREEN : Color.RED);
+            game.getFont().draw(batch, resultado, 530, 350);
+
+            game.getFont().setColor(Color.WHITE);
+            game.getFont().draw(batch, "Presiona ESPACIO para volver al inicio", 400, 300);
         }
     }
 

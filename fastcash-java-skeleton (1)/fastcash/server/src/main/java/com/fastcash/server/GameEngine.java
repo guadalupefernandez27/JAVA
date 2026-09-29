@@ -54,8 +54,26 @@ public class GameEngine {
         jugadores.put(session.playerId, session);
     }
 
-    public void quitarJugador(String playerId) {
+    public synchronized void quitarJugador(String playerId) {
         jugadores.remove(playerId);
+
+        // Si no quedan jugadores activos en la sala, se resetea la partida
+        // para permitir elegir un modulo nuevo en la proxima conexion.
+        if (jugadores.isEmpty()) {
+            reiniciarPartida();
+        }
+    }
+
+    /**
+     * Resetea las variables internas del servidor para poder iniciar una nueva partida.
+     */
+    public synchronized void reiniciarPartida() {
+        moduloId.set(null);
+        recursosCaidos.clear();
+        mapaActual = 0;
+        ultimoSpawnMillis = 0;
+        juegoTerminado = false;
+        System.out.println("[Servidor] Partida reiniciada. Modulo liberado.");
     }
 
     public void recibirInput(InputState input) {
@@ -93,8 +111,11 @@ public class GameEngine {
     public void tick() {
         if (juegoTerminado) return;
 
-        Modulo modulo = GameModules.porId(moduloId.get());
-        if (modulo == null) return; // esperando a que se elija el modulo antes de arrancar
+        String idActual = moduloId.get();
+        if (idActual == null) return; // esperando a que se elija el modulo antes de arrancar
+
+        Modulo modulo = GameModules.porId(idActual);
+        if (modulo == null) return;
 
         spawnearRecursosSiCorresponde(modulo);
         moverRecursos();
@@ -114,8 +135,8 @@ public class GameEngine {
             float x = spawner.posicionXAleatoria();
 
             recursosCaidos.add(new RecursoCaido(
-                UUID.randomUUID().toString(), elegido.id, elegido.valor,
-                elegido.velocidadCaida, x, -30f
+                    UUID.randomUUID().toString(), elegido.id, elegido.valor,
+                    elegido.velocidadCaida, x, -30f
             ));
         }
     }
@@ -131,6 +152,8 @@ public class GameEngine {
             if (!session.state.vivo) continue;
 
             InputState input = session.lastInput;
+            if (input == null) continue;
+
             float proporcionEnergia = session.state.energia / (float) GameConfig.ENERGIA_MAXIMA;
             float velocidad = GameConfig.PLAYER_BASE_SPEED * proporcionEnergia;
 
@@ -215,9 +238,6 @@ public class GameEngine {
                 juegoTerminado = true;
             }
         }
-        // TODO (diseno de juego, no tecnico): decidir si la partida termina
-        // apenas UN jugador gana/pierde, o si sigue hasta que ambos terminen.
-        // Por ahora: si cualquiera gana, se corta para todos.
     }
 
     public GameStateSnapshot snapshot() {
@@ -226,7 +246,7 @@ public class GameEngine {
             estados.add(s.state);
         }
         return new GameStateSnapshot(
-            new ArrayList<>(recursosCaidos), estados, juegoTerminado, moduloId.get(), mapaActual
+                new ArrayList<>(recursosCaidos), estados, juegoTerminado, moduloId.get(), mapaActual
         );
     }
 }
